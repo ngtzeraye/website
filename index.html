@@ -67,9 +67,9 @@
             const activeKey = hasCustomKey ? state.customApiKey.trim() : apiKey;
             
             // Public API keys cannot access the internal preview model.
-            // We use a fallback array to gracefully handle 404 Model Not Found errors caused by regional/account restrictions.
+            // We use a fallback array to gracefully handle 404 Model Not Found errors.
             const modelsToTry = hasCustomKey 
-                ? ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro'] 
+                ? ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'] 
                 : ['gemini-2.5-flash-preview-09-2025'];
             let currentModelIndex = 0;
             
@@ -127,7 +127,17 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
                                 i--; // Do not count this model fallback as a rate-limit retry
                                 continue; 
                             }
-                            return `Connection error (404 Model Not Found): None of the available models are accessible with your API key. Please check your Google Cloud region and Generative Language API permissions.`;
+                            
+                            // DIAGNOSTIC CHECK: If all fallbacks fail, fetch the available models for this specific key
+                            try {
+                                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${activeKey}`;
+                                const listRes = await fetch(listUrl);
+                                const listData = await listRes.json();
+                                const available = listData.models ? listData.models.map(m => m.name.replace('models/', '')).filter(name => name.includes('gemini')).join(', ') : 'unknown';
+                                return `Connection error (404 Model Not Found): Your API key is valid, but the standard models aren't enabled for it. \n\n**Models available to your key:** ${available}. \n\nIf you see 'gemini' models listed here, you may need to enable the Generative Language API in Google Cloud.`;
+                            } catch(e) {
+                                return `Connection error (404 Model Not Found): None of the available models are accessible with your API key. Please check your Google Cloud region and Generative Language API permissions.`;
+                            }
                         }
                         
                         throw new Error(result.error?.message || `API Request failed with status ${response.status}`);
