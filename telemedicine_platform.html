@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CareConnect Telemedicine</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .8; transform: scale(0.98); }
+        }
+        .animate-pulse-slow {
+            animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="font-sans text-gray-900 antialiased selection:bg-blue-200 bg-gray-50">
+    <div id="app"></div>
+
+    <script>
+        // --- MOCK DATA ---
+        const DOCTORS = [
+            { id: 1, name: "Dr. Sarah Jenkins", specialty: "Cardiologist", rating: 4.9, reviews: 128, price: "$150", availability: "Available Today", bg: "bg-blue-100", color: "text-blue-600" },
+            { id: 2, name: "Dr. Michael Chen", specialty: "General Practitioner", rating: 4.8, reviews: 342, price: "$80", availability: "Available in 30 mins", bg: "bg-emerald-100", color: "text-emerald-600" },
+            { id: 3, name: "Dr. Emily Rodriguez", specialty: "Dermatologist", rating: 4.7, reviews: 89, price: "$120", availability: "Available Tomorrow", bg: "bg-purple-100", color: "text-purple-600" },
+            { id: 4, name: "Dr. James Wilson", specialty: "Pediatrician", rating: 4.9, reviews: 412, price: "$100", availability: "Available Today", bg: "bg-orange-100", color: "text-orange-600" },
+            { id: 5, name: "Dr. Anita Patel", specialty: "Neurologist", rating: 4.6, reviews: 76, price: "$200", availability: "Available Friday", bg: "bg-indigo-100", color: "text-indigo-600" },
+            { id: 6, name: "Dr. David Kim", specialty: "Psychiatrist", rating: 4.8, reviews: 156, price: "$140", availability: "Available Today", bg: "bg-rose-100", color: "text-rose-600" }
+        ];
+
+        // --- APP STATE ---
+        let state = {
+            view: 'home', // home, doctors, dashboard, booking, call
+            isMobileMenuOpen: false,
+            user: { name: "Alex Johnson", isLoggedIn: true },
+            appointments: [
+                { id: 101, doctor: DOCTORS[1], date: "Today", time: "14:30 PM", status: "upcoming" }
+            ],
+            selectedDoctor: null,
+            activeCall: null
+        };
+
+        // --- GLOBAL ACTIONS ---
+        window.navigate = function(newView) {
+            state.view = newView;
+            state.isMobileMenuOpen = false;
+            window.scrollTo(0, 0);
+            renderApp();
+        };
+
+        window.toggleMobileMenu = function() {
+            state.isMobileMenuOpen = !state.isMobileMenuOpen;
+            renderApp();
+        };
+
+        window.handleBookAppointment = function(doctorId) {
+            state.selectedDoctor = DOCTORS.find(d => d.id === doctorId);
+            window.navigate('booking');
+        };
+
+        window.confirmBooking = function(date, time) {
+            const newAppointment = {
+                id: Math.floor(Math.random() * 10000),
+                doctor: state.selectedDoctor,
+                date: date || "Tomorrow",
+                time: time || "10:00 AM",
+                status: "upcoming"
+            };
+            state.appointments.push(newAppointment);
+            window.navigate('dashboard');
+        };
+
+        window.joinCall = function(appointmentId) {
+            state.activeCall = state.appointments.find(a => a.id === appointmentId);
+            window.navigate('call');
+        };
+
+        window.endCall = function() {
+            state.activeCall = null;
+            window.navigate('dashboard');
+        };
+
+        // --- COMPONENTS (Template Generators) ---
+
+        function renderNavbar() {
+            return `
+                <nav class="bg-white border-b border-gray-100 sticky top-0 z-50">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex justify-between h-16">
+                            <div class="flex items-center cursor-pointer" onclick="navigate('home')">
+                                <i data-lucide="heart-pulse" class="h-8 w-8 text-blue-600"></i>
+                                <span class="ml-2 text-xl font-bold text-gray-900 tracking-tight">CareConnect</span>
+                            </div>
+                            
+                            <!-- Desktop Nav -->
+                            <div class="hidden md:flex items-center space-x-8">
+                                <button onclick="navigate('home')" class="text-sm font-medium ${state.view === 'home' ? 'text-blue-600' : 'text-gray-600 hover:text-gray-900'}">Home</button>
+                                <button onclick="navigate('doctors')" class="text-sm font-medium ${state.view === 'doctors' ? 'text-blue-600' : 'text-gray-600 hover:text-gray-900'}">Find a Doctor</button>
+                                ${state.user.isLoggedIn ? `
+                                    <button onclick="navigate('dashboard')" class="text-sm font-medium ${state.view === 'dashboard' ? 'text-blue-600' : 'text-gray-600 hover:text-gray-900'}">Dashboard</button>
+                                ` : ''}
+                                
+                                <div class="flex items-center space-x-4 ml-4 border-l border-gray-200 pl-4">
+                                    ${state.user.isLoggedIn ? `
+                                        <div class="flex items-center space-x-3">
+                                            <button class="text-gray-400 hover:text-gray-600">
+                                                <i data-lucide="bell" class="h-5 w-5"></i>
+                                            </button>
+                                            <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm cursor-pointer border border-blue-200" onclick="navigate('dashboard')">
+                                                ${state.user.name.charAt(0)}
+                                            </div>
+                                        </div>
+                                    ` : `
+                                        <button class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                                            Log In
+                                        </button>
+                                    `}
+                                </div>
+                            </div>
+
+                            <!-- Mobile menu button -->
+                            <div class="flex items-center md:hidden">
+                                <button onclick="toggleMobileMenu()" class="text-gray-500 hover:text-gray-700">
+                                    <i data-lucide="${state.isMobileMenuOpen ? 'x' : 'menu'}" class="h-6 w-6"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mobile Menu -->
+                    ${state.isMobileMenuOpen ? `
+                        <div class="md:hidden bg-white border-b border-gray-100 px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                            <button onclick="navigate('home')" class="block w-full text-left px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-md">Home</button>
+                            <button onclick="navigate('doctors')" class="block w-full text-left px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-md">Find a Doctor</button>
+                            ${state.user.isLoggedIn ? `
+                                <button onclick="navigate('dashboard')" class="block w-full text-left px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50 rounded-md">Dashboard</button>
+                            ` : ''}
+                        </div>
+                    ` : ''}
+                </nav>
+            `;
+        }
+
+        function renderHomeView() {
+            const features = [
+                { icon: "clock", title: "No Waiting Rooms", desc: "See a doctor in minutes, not days. Available 24/7 from anywhere." },
+                { icon: "shield", title: "Secure & Private", desc: "HIPAA compliant platform ensuring your medical data is completely safe." },
+                { icon: "file-text", title: "Digital Prescriptions", desc: "Prescriptions sent instantly to your local pharmacy for easy pickup." }
+            ];
+
+            return `
+                <div class="bg-gray-50 pb-12">
+                    <!-- Hero Section -->
+                    <div class="bg-white overflow-hidden">
+                        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
+                            <div class="lg:grid lg:grid-cols-12 lg:gap-8">
+                                <div class="sm:text-center md:max-w-2xl md:mx-auto lg:col-span-6 lg:text-left flex flex-col justify-center">
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold text-blue-600 bg-blue-50 mb-6 w-max">
+                                        <i data-lucide="activity" class="h-4 w-4 mr-2"></i> 24/7 Telehealth Services
+                                    </span>
+                                    <h1 class="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl lg:text-5xl xl:text-6xl">
+                                        <span class="block xl:inline">Quality healthcare</span> 
+                                        <span class="block text-blue-600 xl:inline">from your home.</span>
+                                    </h1>
+                                    <p class="mt-3 text-base text-gray-500 sm:mt-5 sm:text-xl lg:text-lg xl:text-xl">
+                                        Connect with board-certified doctors, therapists, and medical experts via secure video consultations. Get prescriptions, advice, and care instantly.
+                                    </p>
+                                    <div class="mt-8 sm:max-w-lg sm:mx-auto sm:text-center lg:text-left lg:mx-0 flex flex-col sm:flex-row gap-4">
+                                        <button onclick="navigate('doctors')" class="w-full sm:w-auto px-8 py-3 border border-transparent text-base font-medium rounded-xl text-white bg-blue-600 hover:bg-blue-700 md:py-4 md:text-lg shadow-lg shadow-blue-200 transition-all">
+                                            Find a Doctor
+                                        </button>
+                                        <button onclick="navigate('dashboard')" class="w-full sm:w-auto px-8 py-3 border border-gray-200 text-base font-medium rounded-xl text-gray-700 bg-white hover:bg-gray-50 md:py-4 md:text-lg shadow-sm transition-all flex items-center justify-center">
+                                            <i data-lucide="video" class="h-5 w-5 mr-2 text-gray-500"></i> Test Device
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="mt-12 relative sm:max-w-lg sm:mx-auto lg:mt-0 lg:max-w-none lg:mx-0 lg:col-span-6 lg:flex lg:items-center">
+                                    <div class="relative mx-auto w-full rounded-2xl shadow-xl lg:max-w-md overflow-hidden bg-gray-100 aspect-[4/3] flex items-center justify-center group cursor-pointer border border-gray-200">
+                                        <div class="absolute inset-0 bg-gradient-to-tr from-blue-100 to-indigo-50 opacity-90"></div>
+                                        <div class="relative z-10 w-full h-full flex flex-col p-6 justify-between">
+                                            <div class="flex justify-between items-center bg-white/80 backdrop-blur-sm p-3 rounded-xl shadow-sm">
+                                                <div class="flex items-center space-x-3">
+                                                    <div class="h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold">Dr</div>
+                                                    <div>
+                                                        <div class="text-sm font-bold text-gray-900">Dr. Sarah Jenkins</div>
+                                                        <div class="text-xs text-gray-500">Cardiologist • Online</div>
+                                                    </div>
+                                                </div>
+                                                <div class="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center">
+                                                    <i data-lucide="video" class="h-4 w-4 text-green-600"></i>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="self-end bg-blue-600 text-white p-3 rounded-xl rounded-tr-none shadow-md max-w-[80%] mt-4">
+                                                <p class="text-sm">Hello Alex, your test results look great. How are you feeling today?</p>
+                                            </div>
+                                            
+                                            <div class="self-start bg-white p-3 rounded-xl rounded-tl-none shadow-md max-w-[80%] mt-2">
+                                                <p class="text-sm text-gray-700">Much better, thank you doctor. The new medication is helping.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Features Section -->
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+                        <div class="text-center mb-12">
+                            <h2 class="text-base text-blue-600 font-semibold tracking-wide uppercase">Why Choose Us</h2>
+                            <p class="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
+                                A better way to get healthcare
+                            </p>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            ${features.map(f => `
+                                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                                    <div class="h-12 w-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
+                                        <i data-lucide="${f.icon}" class="h-6 w-6 text-blue-600"></i>
+                                    </div>
+                                    <h3 class="text-lg font-bold text-gray-900 mb-2">${f.title}</h3>
+                                    <p class="text-gray-500 text-sm leading-relaxed">${f.desc}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDoctorsView() {
+            const categories = ["All Specialties", "General", "Cardiology", "Dermatology", "Pediatrics", "Neurology", "Psychiatry"];
+            
+            return `
+                <div class="bg-gray-50 py-8 min-h-screen">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                            <div>
+                                <h1 class="text-3xl font-extrabold text-gray-900">Find a Specialist</h1>
+                                <p class="text-gray-500 mt-1">Book an online consultation with top-rated doctors.</p>
+                            </div>
+                            <div class="w-full md:w-auto relative">
+                                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400"></i>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search doctors, specialties..." 
+                                    class="w-full md:w-80 pl-10 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-sm"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="flex overflow-x-auto pb-4 mb-6 gap-2 hide-scrollbar">
+                            ${categories.map((cat, i) => `
+                                <button class="whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-colors ${i === 0 ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}">
+                                    ${cat}
+                                </button>
+                            `).join('')}
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            ${DOCTORS.map(doc => `
+                                <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-lg transition-all flex flex-col">
+                                    <div class="flex items-start space-x-4">
+                                        <div class="h-16 w-16 rounded-2xl ${doc.bg} ${doc.color} flex items-center justify-center text-xl font-bold">
+                                            ${doc.name.split(' ').map(n => n[0]).join('').replace('D', '')}
+                                        </div>
+                                        <div class="flex-1">
+                                            <h3 class="text-lg font-bold text-gray-900">${doc.name}</h3>
+                                            <p class="text-sm text-blue-600 font-medium">${doc.specialty}</p>
+                                            <div class="flex items-center mt-1 text-sm text-gray-500">
+                                                <i data-lucide="star" class="h-4 w-4 text-yellow-400 fill-current mr-1"></i>
+                                                <span class="font-medium text-gray-700 mr-1">${doc.rating}</span>
+                                                <span>(${doc.reviews} reviews)</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-6 flex-1">
+                                        <div class="flex items-center text-sm text-gray-600 mb-2">
+                                            <i data-lucide="clock" class="h-4 w-4 mr-2 text-gray-400"></i>
+                                            ${doc.availability}
+                                        </div>
+                                        <div class="flex items-center text-sm text-gray-600">
+                                            <i data-lucide="activity" class="h-4 w-4 mr-2 text-gray-400"></i>
+                                            Consultation fee: <span class="font-bold text-gray-900 ml-1">${doc.price}</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-6 pt-4 border-t border-gray-100 flex gap-3">
+                                        <button class="flex-1 bg-white border border-blue-200 text-blue-600 py-2 rounded-xl font-medium text-sm hover:bg-blue-50 transition-colors">
+                                            View Profile
+                                        </button>
+                                        <button onclick="handleBookAppointment(${doc.id})" class="flex-1 bg-blue-600 text-white py-2 rounded-xl font-medium text-sm hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200">
+                                            Book Visit
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderBookingView() {
+            const days = ['Today', 'Tomorrow', 'Thu 24', 'Fri 25', 'Sat 26'];
+            const times = ['09:00 AM', '10:30 AM', '13:00 PM', '14:30 PM', '15:00 PM', '16:30 PM'];
+            const doc = state.selectedDoctor;
+            
+            if (!doc) {
+                window.navigate('doctors');
+                return '';
+            }
+
+            const rawPrice = parseInt(doc.price.replace('$', '') || 0);
+            const total = rawPrice + 5;
+
+            return `
+                <div class="bg-gray-50 py-8 min-h-screen">
+                    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <button onclick="navigate('doctors')" class="flex items-center text-sm text-gray-500 hover:text-blue-600 mb-6 transition-colors">
+                            <i data-lucide="chevron-right" class="h-4 w-4 rotate-180 mr-1"></i> Back to Doctors
+                        </button>
+                        
+                        <div class="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div class="p-8 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+                                <div class="flex items-center space-x-6">
+                                    <div class="h-20 w-20 rounded-2xl ${doc.bg} ${doc.color} flex items-center justify-center text-2xl font-bold shadow-sm border border-white">
+                                        ${doc.name.split(' ').map(n => n[0]).join('').replace('D', '')}
+                                    </div>
+                                    <div>
+                                        <h1 class="text-2xl font-extrabold text-gray-900">${doc.name}</h1>
+                                        <p class="text-blue-600 font-medium text-lg">${doc.specialty}</p>
+                                        <div class="flex items-center mt-2 text-sm text-gray-600">
+                                            <i data-lucide="video" class="h-4 w-4 mr-2"></i> 45 min Video Consultation
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="p-8">
+                                <h3 class="text-lg font-bold text-gray-900 mb-4">Select a Date & Time</h3>
+                                
+                                <div class="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-8">
+                                    ${days.map((day, i) => `
+                                        <div class="p-3 rounded-xl border text-center cursor-pointer transition-all ${i === 0 ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50'}">
+                                            <div class="text-xs uppercase font-semibold opacity-80 mb-1">${i === 0 || i === 1 ? '&nbsp;' : day.split(' ')[0]}</div>
+                                            <div class="text-sm font-bold">${i === 0 || i === 1 ? day : day.split(' ')[1]}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+
+                                <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4">Available Slots</h3>
+                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+                                    ${times.map((time, i) => `
+                                        <div class="py-2 px-3 rounded-lg border text-center cursor-pointer text-sm font-medium transition-all ${i === 3 ? 'bg-blue-50 border-blue-300 text-blue-700 ring-2 ring-blue-500 ring-offset-1' : 'bg-white border-gray-200 text-gray-600 hover:border-blue-300'}">
+                                            ${time}
+                                        </div>
+                                    `).join('')}
+                                </div>
+
+                                <div class="bg-gray-50 rounded-xl p-5 mb-8 border border-gray-100">
+                                    <h3 class="text-sm font-bold text-gray-900 mb-3">Consultation Details</h3>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-gray-500 text-sm">Consultation Fee</span>
+                                        <span class="font-medium text-gray-900">${doc.price}</span>
+                                    </div>
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-gray-500 text-sm">Service Tax</span>
+                                        <span class="font-medium text-gray-900">$5.00</span>
+                                    </div>
+                                    <div class="border-t border-gray-200 my-3 pt-3 flex justify-between items-center">
+                                        <span class="font-bold text-gray-900">Total</span>
+                                        <span class="font-bold text-blue-600 text-lg">$${total}.00</span>
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onclick="confirmBooking('Today', '14:30 PM')"
+                                    class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200 flex items-center justify-center"
+                                >
+                                    Confirm Appointment
+                                </button>
+                                <p class="text-center text-xs text-gray-400 mt-4">By booking, you agree to our Terms of Service & Privacy Policy</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderDashboardView() {
+            const activities = [
+                { title: "Consultation Completed", desc: "Dr. James Wilson (Pediatrician)", date: "Oct 12, 2023", icon: "check-circle", color: "text-green-500" },
+                { title: "Prescription Added", desc: "Amoxicillin 500mg, 3 times a day", date: "Oct 12, 2023", icon: "file-text", color: "text-blue-500" },
+                { title: "Lab Results Uploaded", desc: "Complete Blood Count (CBC)", date: "Sep 28, 2023", icon: "activity", color: "text-purple-500" }
+            ];
+
+            return `
+                <div class="bg-gray-50 py-8 min-h-screen">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex items-center space-x-4 mb-8">
+                            <div class="h-16 w-16 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-2xl border-4 border-white shadow-sm">
+                                ${state.user.name.charAt(0)}
+                            </div>
+                            <div>
+                                <h1 class="text-2xl font-extrabold text-gray-900">Welcome back, ${state.user.name.split(' ')[0]}</h1>
+                                <p class="text-gray-500">Manage your appointments and health records.</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <!-- Main Content Area -->
+                            <div class="lg:col-span-2 space-y-6">
+                                
+                                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                                    <div class="flex justify-between items-center mb-6">
+                                        <h2 class="text-xl font-bold text-gray-900">Upcoming Appointments</h2>
+                                        <button class="text-sm text-blue-600 font-medium hover:underline">View All</button>
+                                    </div>
+
+                                    ${state.appointments.length > 0 ? `
+                                        <div class="space-y-4">
+                                            ${state.appointments.map(apt => `
+                                                <div class="bg-gray-50 rounded-xl p-5 border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                    <div class="flex items-center space-x-4">
+                                                        <div class="h-12 w-12 rounded-xl ${apt.doctor.bg} ${apt.doctor.color} flex items-center justify-center font-bold text-lg">
+                                                            ${apt.doctor.name.split(' ').map(n => n[0]).join('').replace('D', '')}
+                                                        </div>
+                                                        <div>
+                                                            <h3 class="font-bold text-gray-900">${apt.doctor.name}</h3>
+                                                            <p class="text-sm text-gray-500">${apt.doctor.specialty}</p>
+                                                            <div class="flex items-center mt-1 text-sm text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded-md w-max">
+                                                                <i data-lucide="calendar" class="h-3 w-3 mr-1"></i> ${apt.date} at ${apt.time}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <button 
+                                                        onclick="joinCall(${apt.id})"
+                                                        class="w-full sm:w-auto bg-green-500 hover:bg-green-600 text-white px-6 py-2.5 rounded-xl font-medium transition-colors shadow-sm shadow-green-200 flex items-center justify-center animate-pulse-slow"
+                                                    >
+                                                        <i data-lucide="video" class="h-4 w-4 mr-2"></i> Join Call Now
+                                                    </button>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : `
+                                        <div class="text-center py-8">
+                                            <div class="mx-auto h-12 w-12 text-gray-300 mb-3"><i data-lucide="calendar" class="h-full w-full"></i></div>
+                                            <h3 class="text-lg font-medium text-gray-900">No upcoming appointments</h3>
+                                            <p class="text-gray-500 mt-1 mb-4">You don't have any consultations scheduled.</p>
+                                            <button onclick="navigate('doctors')" class="text-blue-600 font-medium hover:underline">Book an appointment</button>
+                                        </div>
+                                    `}
+                                </div>
+
+                                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                                    <h2 class="text-xl font-bold text-gray-900 mb-6">Recent Activity</h2>
+                                    <div class="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-200 before:to-transparent">
+                                        ${activities.map(item => `
+                                            <div class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+                                                <div class="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-gray-50 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 relative z-10">
+                                                    <i data-lucide="${item.icon}" class="h-5 w-5 ${item.color}"></i>
+                                                </div>
+                                                <div class="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                                                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1">
+                                                        <h4 class="font-bold text-gray-900 text-sm">${item.title}</h4>
+                                                        <span class="text-xs text-gray-500">${item.date}</span>
+                                                    </div>
+                                                    <p class="text-sm text-gray-600">${item.desc}</p>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sidebar -->
+                            <div class="space-y-6">
+                                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                                    <h2 class="text-lg font-bold text-gray-900 mb-4">Quick Links</h2>
+                                    <div class="space-y-2">
+                                        <button class="w-full flex items-center p-3 rounded-xl hover:bg-gray-50 text-gray-700 transition-colors">
+                                            <i data-lucide="file-text" class="h-5 w-5 text-blue-600 mr-3"></i> 
+                                            <span class="font-medium">My Medical Records</span>
+                                            <i data-lucide="chevron-right" class="h-4 w-4 ml-auto text-gray-400"></i>
+                                        </button>
+                                        <button class="w-full flex items-center p-3 rounded-xl hover:bg-gray-50 text-gray-700 transition-colors">
+                                            <i data-lucide="activity" class="h-5 w-5 text-emerald-600 mr-3"></i> 
+                                            <span class="font-medium">Test Results</span>
+                                            <span class="ml-auto bg-red-100 text-red-600 py-0.5 px-2 rounded-full text-xs font-bold">1 New</span>
+                                        </button>
+                                        <button class="w-full flex items-center p-3 rounded-xl hover:bg-gray-50 text-gray-700 transition-colors">
+                                            <i data-lucide="shield" class="h-5 w-5 text-purple-600 mr-3"></i> 
+                                            <span class="font-medium">Insurance Details</span>
+                                            <i data-lucide="chevron-right" class="h-4 w-4 ml-auto text-gray-400"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-sm p-6 text-white relative overflow-hidden">
+                                    <div class="absolute -right-4 -top-4 opacity-10">
+                                        <i data-lucide="heart-pulse" class="h-32 w-32"></i>
+                                    </div>
+                                    <h2 class="text-lg font-bold mb-2 relative z-10">Need urgent care?</h2>
+                                    <p class="text-blue-100 text-sm mb-4 relative z-10">Connect with an on-call physician within 5 minutes.</p>
+                                    <button class="bg-white text-blue-600 w-full py-2.5 rounded-xl font-bold text-sm shadow-sm relative z-10 hover:bg-blue-50 transition-colors">
+                                        Start Urgent Visit
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderVideoCallView() {
+            const doc = state.activeCall?.doctor || { name: "Dr. Consultation", bg: "bg-blue-900" };
+            const docInitials = doc.name.split(' ').map(n => n[0]).join('').replace('D', '');
+
+            return `
+                <div class="h-screen w-full bg-gray-950 flex flex-col overflow-hidden relative">
+                    <!-- Top Bar -->
+                    <div class="absolute top-0 w-full p-4 flex justify-between items-center z-10 bg-gradient-to-b from-black/70 to-transparent">
+                        <div class="flex items-center space-x-3">
+                            <div class="bg-red-500 h-2 w-2 rounded-full animate-pulse"></div>
+                            <span class="text-white font-medium text-sm drop-shadow-md">04:23</span>
+                            <span class="text-gray-300 text-sm px-2 border-l border-gray-600">${doc.name}</span>
+                        </div>
+                        <div class="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-white text-xs font-medium flex items-center">
+                            <i data-lucide="shield" class="h-3 w-3 mr-1 text-green-400"></i> End-to-end Encrypted
+                        </div>
+                    </div>
+
+                    <!-- Main Video Area (Doctor) -->
+                    <div class="flex-1 relative w-full h-full bg-gray-900 flex items-center justify-center overflow-hidden">
+                        <div class="absolute inset-0 bg-gray-800 flex flex-col items-center justify-center">
+                            <div class="h-32 w-32 rounded-full ${doc.bg} flex items-center justify-center text-4xl font-bold text-white shadow-2xl mb-4 border-4 border-gray-700">
+                                ${docInitials}
+                            </div>
+                            <p class="text-white text-xl font-medium animate-pulse">Connecting to audio/video...</p>
+                        </div>
+                    </div>
+
+                    <!-- PIP Video Area (Patient) -->
+                    <div class="absolute bottom-24 right-4 w-32 h-48 sm:w-48 sm:h-64 bg-gray-800 rounded-xl overflow-hidden shadow-2xl border-2 border-gray-700 z-10 flex items-center justify-center">
+                        <div class="text-gray-500 flex flex-col items-center">
+                            <i data-lucide="user" class="h-8 w-8 mb-2 opacity-50"></i>
+                            <span class="text-xs">You</span>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Controls -->
+                    <div class="absolute bottom-0 w-full p-6 bg-gradient-to-t from-black/90 to-transparent flex justify-center items-center space-x-4 sm:space-x-6 z-20">
+                        <button class="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gray-800/80 hover:bg-gray-700 backdrop-blur border border-gray-600 flex items-center justify-center text-white transition-all">
+                            <i data-lucide="mic" class="h-5 w-5 sm:h-6 sm:w-6"></i>
+                        </button>
+                        <button class="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gray-800/80 hover:bg-gray-700 backdrop-blur border border-gray-600 flex items-center justify-center text-white transition-all">
+                            <i data-lucide="video" class="h-5 w-5 sm:h-6 sm:w-6"></i>
+                        </button>
+                        <button 
+                            onclick="endCall()"
+                            class="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center text-white shadow-lg shadow-red-900/50 transition-all transform hover:scale-105"
+                        >
+                            <i data-lucide="phone-off" class="h-6 w-6 sm:h-7 sm:w-7"></i>
+                        </button>
+                        <button class="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-gray-800/80 hover:bg-gray-700 backdrop-blur border border-gray-600 flex items-center justify-center text-white transition-all">
+                            <i data-lucide="message-square" class="h-5 w-5 sm:h-6 sm:w-6"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderFooter() {
+            return `
+                <footer class="bg-white border-t border-gray-100 py-8">
+                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div class="flex items-center text-gray-900 font-bold">
+                            <i data-lucide="heart-pulse" class="h-5 w-5 text-blue-600 mr-2"></i> CareConnect
+                        </div>
+                        <p class="text-sm text-gray-500">© 2026 CareConnect Telehealth. All rights reserved.</p>
+                        <div class="flex space-x-4 text-sm text-gray-500">
+                            <a href="#" class="hover:text-blue-600">Privacy</a>
+                            <a href="#" class="hover:text-blue-600">Terms</a>
+                            <a href="#" class="hover:text-blue-600">Support</a>
+                        </div>
+                    </div>
+                </footer>
+            `;
+        }
+
+        // --- CORE RENDER FUNCTION ---
+        function renderApp() {
+            const app = document.getElementById('app');
+            let html = '';
+            
+            if (state.view !== 'call') html += renderNavbar();
+            
+            html += '<main>';
+            switch (state.view) {
+                case 'home': html += renderHomeView(); break;
+                case 'doctors': html += renderDoctorsView(); break;
+                case 'booking': html += renderBookingView(); break;
+                case 'dashboard': html += renderDashboardView(); break;
+                case 'call': html += renderVideoCallView(); break;
+            }
+            html += '</main>';
+
+            if (state.view !== 'call') html += renderFooter();
+            
+            app.innerHTML = html;
+            
+            // Re-initialize Lucide Icons after modifying DOM
+            lucide.createIcons();
+        }
+
+        // Initial render
+        renderApp();
+    </script>
+</body>
+</html>
