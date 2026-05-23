@@ -66,9 +66,12 @@
             const hasCustomKey = state.customApiKey && state.customApiKey.trim() !== "";
             const activeKey = hasCustomKey ? state.customApiKey.trim() : apiKey;
             
-            // Public API keys cannot access the internal preview model. Switch to standard 1.5-flash if a custom key is used.
-            const modelName = hasCustomKey ? 'gemini-1.5-flash' : 'gemini-2.5-flash-preview-09-2025';
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
+            // Public API keys cannot access the internal preview model.
+            // We use a fallback array to gracefully handle 404 Model Not Found errors caused by regional/account restrictions.
+            const modelsToTry = hasCustomKey 
+                ? ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-pro'] 
+                : ['gemini-2.5-flash-preview-09-2025'];
+            let currentModelIndex = 0;
             
             const systemPrompt = `You are a helpful and professional general practitioner AI symptom checker for a telemedicine website.
 1. Ask the user for their symptoms if they haven't provided enough detail.
@@ -99,6 +102,9 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
             let delays = [1000, 2000, 4000, 8000, 16000];
             
             for (let i = 0; i < retries; i++) {
+                let modelName = modelsToTry[currentModelIndex];
+                let url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
+                
                 try {
                     const response = await fetch(url, {
                         method: 'POST',
@@ -111,11 +117,19 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
                     if (!response.ok) {
                         // Specifically catch the 403 Missing API Key error
                         if (response.status === 403) {
-                            return "Connection error (403 Permission Denied): To use this symptom checker, please enter your own Gemini API Key in the input field at the top of the chat.";
+                            return "Connection error (403 Permission Denied): Your API key is missing or invalid. Please check the API key you entered.";
                         }
+                        
+                        // Automatically fall back to older/alternative models if the current one throws a 404
                         if (response.status === 404) {
-                            return `Connection error (404 Model Not Found): The model ${modelName} is not accessible with the provided API key.`;
+                            if (currentModelIndex < modelsToTry.length - 1) {
+                                currentModelIndex++;
+                                i--; // Do not count this model fallback as a rate-limit retry
+                                continue; 
+                            }
+                            return `Connection error (404 Model Not Found): None of the available models are accessible with your API key. Please check your Google Cloud region and Generative Language API permissions.`;
                         }
+                        
                         throw new Error(result.error?.message || `API Request failed with status ${response.status}`);
                     }
                     
