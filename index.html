@@ -55,14 +55,21 @@
             chatHistory: [
                 { role: 'model', text: "Hello! I am the CareConnect AI Symptom Checker. Please tell me what symptoms you are experiencing today.\n\n*Disclaimer: I am an AI, not a human doctor. For medical emergencies or if you are truly unsure, please visit a doctor or emergency room immediately.*" }
             ],
-            isTyping: false
+            isTyping: false,
+            customApiKey: "" // Allows users to input their own API key on GitHub/external hosts
         };
 
         // --- GEMINI API INTEGRATION ---
-        const apiKey = ""; // Provided by execution environment
+        const apiKey = "";
         
         async function callGeminiAPI() {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const hasCustomKey = state.customApiKey && state.customApiKey.trim() !== "";
+            const activeKey = hasCustomKey ? state.customApiKey.trim() : apiKey;
+            
+            // Public API keys cannot access the internal preview model. Switch to standard 1.5-flash if a custom key is used.
+            const modelName = hasCustomKey ? 'gemini-1.5-flash' : 'gemini-2.5-flash-preview-09-2025';
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${activeKey}`;
+            
             const systemPrompt = `You are a helpful and professional general practitioner AI symptom checker for a telemedicine website.
 1. Ask the user for their symptoms if they haven't provided enough detail.
 2. List possible common illnesses based on the symptoms.
@@ -73,8 +80,9 @@
 7. LEGAL DISCLAIMER REQUIRED: Always include a disclaimer reminding the user that you are an AI and they should visit a doctor if they are truly unsure or if symptoms worsen. 
 Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not discuss harmful, illegal, or mature topics. Format responses nicely using markdown bolding.`;
 
-            // Prepare conversation history
+            // Prepare conversation history (Skip the first hardcoded greeting as API expects conversation to start with 'user')
             const contents = state.chatHistory
+                .slice(1) // Skip the first model message
                 .filter(msg => msg.text.trim() !== '') 
                 .map(msg => ({
                     role: msg.role === 'user' ? 'user' : 'model',
@@ -86,10 +94,11 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
                 systemInstruction: { parts: [{ text: systemPrompt }] }
             };
 
-            // Exponential backoff logic
+            // Exponential backoff logic: 1s, 2s, 4s, 8s, 16s
             let retries = 5;
-            let delay = 1000;
-            while (retries > 0) {
+            let delays = [1000, 2000, 4000, 8000, 16000];
+            
+            for (let i = 0; i < retries; i++) {
                 try {
                     const response = await fetch(url, {
                         method: 'POST',
@@ -97,15 +106,25 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
                         body: JSON.stringify(payload)
                     });
                     
-                    if (!response.ok) throw new Error('API Request failed');
-                    
                     const result = await response.json();
+                    
+                    if (!response.ok) {
+                        // Specifically catch the 403 Missing API Key error
+                        if (response.status === 403) {
+                            return "Connection error (403 Permission Denied): To use this symptom checker, please enter your own Gemini API Key in the input field at the top of the chat.";
+                        }
+                        if (response.status === 404) {
+                            return `Connection error (404 Model Not Found): The model ${modelName} is not accessible with the provided API key.`;
+                        }
+                        throw new Error(result.error?.message || `API Request failed with status ${response.status}`);
+                    }
+                    
                     return result.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't generate a response.";
                 } catch (error) {
-                    retries--;
-                    if (retries === 0) return "Connection error: Unable to reach the symptom checker service at this time. Please try again later or consult a doctor directly.";
-                    await new Promise(res => setTimeout(res, delay));
-                    delay *= 2;
+                    if (i === retries - 1) {
+                        return `Connection error: ${error.message}. Please try again later.`;
+                    }
+                    await new Promise(res => setTimeout(res, delays[i]));
                 }
             }
         }
@@ -337,9 +356,11 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
             return `
                 <div class="bg-gray-50 py-8 min-h-[calc(100vh-64px)] flex flex-col">
                     <div class="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex-1 flex flex-col">
-                        <div class="mb-6">
-                            <h1 class="text-3xl font-extrabold text-gray-900">AI Symptom Checker</h1>
-                            <p class="text-gray-500 mt-1">Get initial guidance on your symptoms before seeing a doctor.</p>
+                        <div class="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
+                            <div>
+                                <h1 class="text-3xl font-extrabold text-gray-900">AI Symptom Checker</h1>
+                                <p class="text-gray-500 mt-1">Get initial guidance on your symptoms before seeing a doctor.</p>
+                            </div>
                         </div>
                         
                         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start space-x-3 shadow-sm">
@@ -351,9 +372,9 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
 
                         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex-1 flex flex-col overflow-hidden h-[500px]">
                             <!-- Chat Header -->
-                            <div class="p-4 border-b border-gray-100 bg-white flex items-center justify-between">
-                                <div class="flex items-center space-x-3">
-                                    <div class="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white shadow-sm">
+                            <div class="p-4 border-b border-gray-100 bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div class="flex items-center space-x-3 w-full sm:w-auto">
+                                    <div class="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white shadow-sm shrink-0">
                                         <i data-lucide="bot" class="h-5 w-5"></i>
                                     </div>
                                     <div>
@@ -361,9 +382,20 @@ Keep all responses safe, clean, healthy, and age-appropriate (under 18). Do not 
                                         <p class="text-xs text-green-500 flex items-center"><span class="h-2 w-2 bg-green-500 rounded-full mr-1"></span> Online</p>
                                     </div>
                                 </div>
-                                <button onclick="state.chatHistory = [state.chatHistory[0]]; renderApp();" class="text-xs text-gray-500 hover:text-blue-600 flex items-center">
-                                    <i data-lucide="refresh-cw" class="h-3 w-3 mr-1"></i> Reset Chat
-                                </button>
+                                <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
+                                    <input 
+                                        type="password" 
+                                        id="user-api-key" 
+                                        placeholder="Enter Gemini API Key..." 
+                                        class="text-xs px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 w-full sm:w-48 shadow-sm transition-all"
+                                        value="${state.customApiKey || ''}"
+                                        oninput="state.customApiKey = this.value"
+                                        title="Provide your Gemini API Key if hosting outside the preview environment"
+                                    />
+                                    <button onclick="state.chatHistory = [state.chatHistory[0]]; renderApp();" class="text-xs text-gray-600 hover:text-blue-600 flex items-center bg-gray-50 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-blue-200 transition-colors shadow-sm shrink-0">
+                                        <i data-lucide="refresh-cw" class="h-3 w-3 mr-1.5"></i> Reset
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Chat Messages -->
